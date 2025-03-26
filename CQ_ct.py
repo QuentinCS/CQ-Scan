@@ -356,7 +356,7 @@ class CT_quality:
 
         self.display_results()
         
-        # Dictionnaire pour créer un dataframe pour les résultats
+        # Dictionnaire pour créer un dataframe pour les résultats complets
         results = {
             "Region": ["Centrale", "Lateral_N", "Lateral_S", "Lateral_E", "Lateral_W"],
             "Moyenne": [
@@ -371,6 +371,14 @@ class CT_quality:
         self.df_results = pd.DataFrame(results)
         self.df_results["Uniformité"] = [self.unif] + [None] * 4  # Ajouter la valeur de l'uniformité à la première ligne seulement
         
+        # Dictionnaire pour créer un dataframe pour les résultats à copier 
+        short_results = {
+            "Region": ["NCT centre", "Bruit Centre", "NCT Haut", "NCT Droit", "NCT Bas", "NCT Gauche"],
+            "Value": [
+                self.n_ct_center, self.sigma_ct_center, self.n_ct_lateral_N, self.n_ct_lateral_E, self.n_ct_lateral_S, self.n_ct_lateral_W
+            ],
+        }
+        self.df_short_results = pd.DataFrame(short_results)
         # Dictionnaire pour créer un dataframe pour les données Dicom et d'analyse
         data = {
             "Appareil": [self.device],
@@ -476,8 +484,9 @@ class CT_quality:
         try:
             # Sauvegarde des DataFrames dans un fichier Excel avec plusieurs feuilles
             with pd.ExcelWriter(self.save_path, engine="openpyxl") as writer:
+                self.df_short_results.to_excel(writer, sheet_name="Résultats à copier", index=False)
                 self.df_data.to_excel(writer, sheet_name="Données", index=False)
-                self.df_results.to_excel(writer, sheet_name="Résultats", index=False)
+                self.df_results.to_excel(writer, sheet_name="Résultats complets", index=False)
             self.save_figure()
             self.text_info_area.insert("end", "Données sauvegardées\n")
         except Exception as e:
