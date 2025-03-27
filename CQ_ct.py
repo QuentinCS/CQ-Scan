@@ -28,9 +28,9 @@ class CT_quality:
 
         # Dictionnaire pour les marges internes du fantôme par défaut pour les différents constructeurs  
         self.phantom_dict = {
-            "Philips" : 8,
+            "Philips" : 6,
             "GE MEDICAL SYSTEMS" : 7,
-            "Canon Medical Systems": 4,
+            "Canon Medical Systems": 5,
             "SIEMENS": 5,
             }
         
@@ -41,7 +41,7 @@ class CT_quality:
         self.mean_radius = None # Rayon moyen du contour => rayon du fantôme détecté
         self.roi_centrale_size = None # Taille de la ROI centrale 
         self.roi_laterale_size = None # Taille des ROIs latérales
-        self.internal_margin = 0 # Marge interne du fantôme vis àa vis du contour extérieur du fantôme
+        self.internal_margin = 0 # Epaisseur de la paroi du fantôme
         self.external_roi_offset = 20 # Décalage des ROIs externes par rapport au contour interne du fantôme
         self.dicom_data = None  # Stocke les données DICOM chargées
         self.dicom_files = []  # Liste pour enregistrer les fichiers Dicom
@@ -119,7 +119,7 @@ class CT_quality:
         self.get_value_button_slice.grid(row=2, column=1, padx=10, pady=5)
              
         # ---- Champ de saisie pour entrer une valeur ----
-        self.entry_label_internal_margin = ttk.Label(self.button_frame, text="Marge interne (mm, facultatif):")
+        self.entry_label_internal_margin = ttk.Label(self.button_frame, text="Epaisseur paroi (mm, facultatif):")
         self.entry_label_internal_margin.grid(row=3, column=0, padx=10, pady=(5, 0), sticky="w")
         
         # Création d'un champ de saisie (Entry) pour l'utilisateur
@@ -131,7 +131,7 @@ class CT_quality:
         self.get_value_button_internal_margin.grid(row=4, column=1, padx=10, pady=5)
                
         # ---- Champ de saisie pour entrer une valeur ----
-        self.entry_label = ttk.Label(self.button_frame, text="Offset ROIs latérales (mm, facultatif, par défaut 20 mm):")
+        self.entry_label = ttk.Label(self.button_frame, text="Offset ROIs (mm, par défaut Dist: 20 mm):")
         self.entry_label.grid(row=5, column=0, padx=10, pady=(5, 0), sticky="w")
         
         # Création d'un champ de saisie (Entry) pour l'utilisateur
@@ -300,6 +300,7 @@ class CT_quality:
         self.max_radius = self.distances.max()
         self.internal_radius = self.max_radius - (self.internal_margin / self.pixel_spacing[0])
         self.diameter_mes_mm = self.max_radius*2*self.pixel_spacing[0]
+        self.internal_diameter_mm = 2*self.internal_radius*self.pixel_spacing[0]
 
         # Création du mask d'une ROI circulaire de la taille du fantôme et du mask d'une ROI circulaire correspondant au fantôme interne en utilisant le rayon interne
         self.phantom = self.create_circular_roi([self.size_x, self.size_y], self.phantom_center, self.max_radius)
@@ -333,7 +334,8 @@ class CT_quality:
         # Affichage de l'image et des différentes ROIs
         self.display_image_rois()
         
-        self.text_info_area.insert("end", f'\nDiamètre fantôme mesuré: {self.diameter_mes_mm:.1f} mm \n')
+        self.text_info_area.insert("end", f'\nDiamètre fantôme: {self.diameter_mes_mm:.1f} mm')
+        self.text_info_area.insert("end", f'\nDiamètre interne fantôme: {self.internal_diameter_mm:.1f} mm \n')
         
     # Fonction pour réaliser la mesure des ROIs et enregistrer les données sous forme de dataframe
     def analyze(self):
@@ -352,7 +354,7 @@ class CT_quality:
         self.n_ct_lateral_W = np.mean(self.external_roi_W)
         self.sigma_ct_lateral_W = np.std(self.external_roi_W)
         
-        self.unif = abs(max([self.n_ct_center-self.n_ct_lateral_N, self.n_ct_center-self.n_ct_lateral_S, self.n_ct_center-self.n_ct_lateral_E, self.n_ct_center-self.n_ct_lateral_W]))
+        self.unif = abs(max([abs(self.n_ct_center-self.n_ct_lateral_N), abs(self.n_ct_center-self.n_ct_lateral_S), abs(self.n_ct_center-self.n_ct_lateral_E), abs(self.n_ct_center-self.n_ct_lateral_W)]))
 
         self.display_results()
         
@@ -392,8 +394,10 @@ class CT_quality:
             "Numéro Slice": [self.slice_number],
             "Date Acquisition": [self.date],
             "Date Analyse": [datetime.now().date().strftime("%d/%m/%Y")],
-            "Marge interne (mm)": [self.internal_margin],
-            "Marge ROIs externes (mm)": [self.external_roi_offset],
+            "Diamètre fantôme (mm)": [f'{self.diameter_mes_mm:.1f}'],
+            "Diamètre interne fantôme (mm)": [f'{self.internal_diameter_mm:.1f}'],
+            "Epaisseur paroi (mm)": [self.internal_margin],
+            "Offset ROIs externes (mm)": [self.external_roi_offset],
         }
         self.df_data = pd.DataFrame(data)
         self.df_data = self.df_data.T
@@ -404,7 +408,7 @@ class CT_quality:
     def display_info(self):
         self.text_info_area.delete("1.0", "end")  # Efface le texte précédent
         self.result_area.delete("1.0", "end")  # Efface le texte précédent
-        self.text_info_area.insert("end", f'Site: {self.institution} \nConstructeur: {self.manufacturer} \nModèle: {self.device} \nNom: {self.name}\nTension: {self.tension} kV \nMatrice: {self.size_x} X {self.size_y} \nCoupe: {self.slice_number} \nDate de mesure: {self.date} \n\nMarge interne: {self.internal_margin} mm \nOffset ROI latérales: {self.external_roi_offset} mm \n')
+        self.text_info_area.insert("end", f'Site: {self.institution} \nConstructeur: {self.manufacturer} \nModèle: {self.device} \nNom: {self.name}\nTension: {self.tension} kV \nMatrice: {self.size_x} X {self.size_y} \nCoupe: {self.slice_number} \nDate de mesure: {self.date} \n\nEpaisseur paroi: {self.internal_margin} mm \nOffset ROI latérales: {self.external_roi_offset} mm \n')
 
     # Fonction pour afficher les résultats après la mesure 
     def display_results(self):
