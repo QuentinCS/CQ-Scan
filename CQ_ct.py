@@ -25,8 +25,8 @@ class CT_quality:
     def __init__(self, root):
         self.root = root
         self.root.title("Qualité image CT") # Titre de l'interface 
-        self.root.geometry("1400x1000") # Taille de l'interface 
-
+        self.root.state('zoomed') # Taille de l'interface (fullscreen)
+        
         # Dictionnaire pour les marges internes du fantôme par défaut pour les différents constructeurs  
         self.phantom_dict = {
             "Philips" : 6,
@@ -77,8 +77,8 @@ class CT_quality:
         self.external_roi_E = {}
         self.external_roi_W = {}
         
-        # Définir la fenêtre osseuse (WW et WL)
-        self.WW = 100  # Largeur de la fenêtre
+        # Définir la fenêtre de visualisation
+        self.WW = 80  # Largeur de la fenêtre
         self.WL = 0   # Niveau de la fenêtre
 
         # Appliquer la fenêtre de contraste
@@ -125,7 +125,7 @@ class CT_quality:
         self.image_frame.grid(row=1, column=0, columnspan=2, pady=5)
      
         # Création d'un bouton pour sélectionner les fichiers DICOM avec les images 
-        self.load_button = ttk.Button(self.button_frame, text="Charger un dossier avec les images Dicom", command=self.load_dicom)
+        self.load_button = ttk.Button(self.button_frame, text="Charger le dossier", command=self.load_dicom)
         self.load_button.grid(pady=5)
         
         # ---- Champ de saisie pour entrer une valeur ----
@@ -166,15 +166,15 @@ class CT_quality:
                
         # Création d'un bouton pour lancer la détection des contours 
         self.analyze_button = ttk.Button(self.button_frame, text="Mesurer", command=self.analyze_all_images)
-        self.analyze_button.grid(pady=5)
+        self.analyze_button.grid(row=7, column=0, pady=5)
         
         # Création d'un bouton pour sauvegarder les données
         self.save_button = ttk.Button(self.button_frame, text="Sauvegarder", command=self.save_results)
-        self.save_button.grid(pady=5)
+        self.save_button.grid(row=7, column=1, pady=5)
         
         # Création d'un bouton pour réinitialiser l'interface
         self.reinitialize_button = ttk.Button(self.button_frame, text="Réinitialiser", command=self.reinitialize)
-        self.reinitialize_button.grid(pady=5)
+        self.reinitialize_button.grid(row=8, column=1, pady=5)
            
     ############################# Déclaration des fonctions de la classe #################################
     
@@ -209,7 +209,6 @@ class CT_quality:
                                 self.dicom_images[self.image_name] = (
                                     self.dicom_data.pixel_array * self.dicom_data.RescaleSlope + self.dicom_data.RescaleIntercept
                                     )
-                                #print('Test 1')
                                 if self.num_image == 0: 
                                     self.device = self.dicom_metadata.get(self.image_name, {}).get('Device', 'Inconnu')
                                     self.institution = self.dicom_metadata.get(self.image_name, {}).get('Institution', 'Inconnu')
@@ -219,11 +218,10 @@ class CT_quality:
                                 self.num_image += 1
                                 break
                         except Exception as e:
-                            print(f"Erreur lors de la lecture du fichier {self.dicom_path}: {e}")
-            
+                            self.text_info_area.insert("end", f"Erreur lors de la lecture du fichier {self.dicom_path}: {e}")
+
         else:
                 # Réinitialisation des variables 
-                #self.dicom_data.clear()
                 self.dicom_images.clear()
                 self.dicom_metadata.clear()
                 self.num_image = 0
@@ -242,8 +240,6 @@ class CT_quality:
                                 self.dicom_images[self.image_name] = (
                                     self.dicom_data.pixel_array * self.dicom_data.RescaleSlope + self.dicom_data.RescaleIntercept
                                     )
-                                
-                                #print('Test 1')
                                 if self.num_image == 0: 
                                     self.device = self.dicom_metadata.get(self.image_name, {}).get('Device', 'Inconnu')
                                     self.institution = self.dicom_metadata.get(self.image_name, {}).get('Institution', 'Inconnu')
@@ -253,7 +249,8 @@ class CT_quality:
                                 self.num_image += 1
                                 break
                         except Exception as e:
-                            print(f"Erreur lors de la lecture du fichier {self.dicom_path}: {e}")
+                            self.text_info_area.insert("end", f"Erreur lors de la lecture du fichier {self.dicom_path}: {e}")
+
         # Appliquer les ROis détecté sur la première images sur toutes les images 
         self.apply_rois_to_all_images()
         
@@ -265,7 +262,7 @@ class CT_quality:
         self.text_info_area.delete("1.0", "end")  # Efface le texte précédent
         self.result_area.delete("1.0", "end")  # Efface le texte précédent
         self.text_info_area.insert("end", f'Images trouvées: {self.images_names} \n\n')
-        self.text_info_area.insert("end", f'Site: {self.dicom_metadata[self.image_name]["Institution"]} \nConstructeur: {self.dicom_metadata[self.image_name]["Manufacturer"]} \nModèle: {self.dicom_metadata[self.image_name]["Device"]} \nNom: {self.dicom_metadata[self.image_name]["Name"]} \nMatrice: {self.dicom_metadata[self.image_name]["Size_x"]} X {self.dicom_metadata[self.image_name]["Size_y"]} \nCoupe: {self.dicom_metadata[self.image_name]["Slice_number"]} \nDate de mesure: {self.dicom_metadata[self.image_name]["Date"]} \n\nEpaisseur paroi: {self.internal_margin} mm \nOffset ROI latérales: {self.external_roi_offset} mm \n')
+        self.text_info_area.insert("end", f'Site: {self.dicom_metadata[self.image_name]["Institution"]} \nConstructeur: {self.dicom_metadata[self.image_name]["Manufacturer"]} \nModèle: {self.dicom_metadata[self.image_name]["Device"]} \nNom: {self.dicom_metadata[self.image_name]["Name"]} \nCoupe: {self.dicom_metadata[self.image_name]["Slice_number"]} \nDate de mesure: {self.dicom_metadata[self.image_name]["Date"]} \n\nEpaisseur paroi: {self.internal_margin} mm \nOffset ROI latérales: {self.external_roi_offset} mm \n')
 
     # Fonction pour afficher les données Dicom
     def display_dicom_tag(self):
@@ -313,10 +310,8 @@ class CT_quality:
         self.size_x = metadata["Size_x"]
         self.size_y = metadata["Size_y"]
         
-        # Stocke les métadonnées dans un dictionnaire avec un nom unique
-        self.dicom_metadata[self.image_name] = metadata
-        #print(self.dicom_metadata[metadata["Tension"])
-        
+        # Stocke les métadonnées dans un dictionnaire avec un nom unique et un dataframe
+        self.dicom_metadata[self.image_name] = metadata       
         self.df_data = pd.DataFrame(self.dicom_metadata)
         
         # Utiliser la marge présente dans le dictionnaire si le constructeur existe 
@@ -351,16 +346,16 @@ class CT_quality:
         if self.dicom_data is not None and hasattr(self.dicom_data, 'pixel_array'):
             # Créer une figure Matplotlib
             if not self.dicom_images:
-                print("Aucune image DICOM à afficher.")
+                self.text_info_area.insert("end", "Aucune image DICOM à afficher.")
                 return
                 
             num_images = len(self.dicom_images)
-            num_cols = 2
+            num_cols = 4
             num_rows = math.ceil(num_images / num_cols)
     
             # S'assurer qu'il y a au moins une image avant de créer la figure
             if num_images == 0:
-                print("Erreur : aucune image à afficher.")
+                self.text_info_area.insert("end", "Erreur : aucune image à afficher.")
                 return
 
             fig, axes = plt.subplots(num_rows, num_cols, figsize=(20, num_rows * 10))
@@ -405,48 +400,44 @@ class CT_quality:
            
     # Fonction pour identifier les contours du fantôme dans l'image à partir d'un seuillage sur les UH "self.seuil" 
     def find_contour(self):
-        #print('0')
         # Créer un masque binaire à partir des seuils
         self.mask = self.dicom_images[self.image_name] >= self.seuil
-        #print('a')
 
         # Récupérer les pixels à l'intérieur du mask
         self.active_pixels = np.argwhere(self.mask)
-        #print('b')
+        
         # Calcul des distances entre les pixels du mask et le centre du mask
         self.phantom_center = self.active_pixels.mean(axis=0) # Attention à l'ordre des axes, [?, ?] => [y, x] [horizontal, vertical]
-        #print('c')
+        
         # Calculer la distance entre chaque pixel du mask et le centre
         self.distances = np.sqrt((self.active_pixels[:, 0] - self.phantom_center[0])**2 + (self.active_pixels[:, 1] - self.phantom_center[1])**2)
-        #print('d')
+        
         # Calculer le rayon max => Rayon du fantôme
         self.max_radius = self.distances.max()
         self.internal_radius = self.max_radius - (self.internal_margin / self.pixel_spacing[0])
         self.diameter_mes_mm = self.max_radius*2*self.pixel_spacing[0]
         self.internal_diameter_mm = 2*self.internal_radius*self.pixel_spacing[0]
-        #print('e')
+        
         # Création du mask d'une ROI circulaire de la taille du fantôme et du mask d'une ROI circulaire correspondant au fantôme interne en utilisant le rayon interne
         self.phantom = self.create_circular_roi([self.size_x, self.size_y], self.phantom_center, self.max_radius)
         self.internal_phantom = self.create_circular_roi([self.size_x, self.size_y], self.phantom_center, self.internal_radius)
-        #print('f')
+        
         # Définition des tailles des ROIs centrale et latérales 
         self.central_roi_size = self.central_roi_s * self.internal_radius
         self.external_roi_size = self.external_roi_s * self.internal_radius
-        #print('g')
+        
         # Distance des rois externes du bord interne du fantôme
         self.radius = self.internal_radius - (self.external_roi_offset / self.pixel_spacing[0])
-        #print('h')
+        
         # Fixe la distance minimum des ROIs latérales à la taille des ROIs afin de maintenir les ROIs dans le fantômes interne 
         if self.radius >= (self.internal_radius - self.external_roi_size):
             self.radius = self.internal_radius - self.external_roi_size
-        #print('i')
         # Création des maks des ROIs centrale et latérales 
         self.mask_central_roi = self.create_circular_roi([self.size_x, self.size_y], self.phantom_center , self.central_roi_size)
         self.mask_external_N_roi = self.create_circular_roi([self.size_x, self.size_y], [self.phantom_center[0] - self.radius, self.phantom_center[1]] , self.external_roi_size)
         self.mask_external_S_roi = self.create_circular_roi([self.size_x, self.size_y], [self.phantom_center[0] + self.radius, self.phantom_center[1]] , self.external_roi_size)
         self.mask_external_W_roi = self.create_circular_roi([self.size_x, self.size_y], [self.phantom_center[0], self.phantom_center[1] - self.radius] , self.external_roi_size)
         self.mask_external_E_roi = self.create_circular_roi([self.size_x, self.size_y], [self.phantom_center[0], self.phantom_center[1] + self.radius] , self.external_roi_size)
-        #print('j')
 
         self.text_info_area.insert("end", f'Diamètre fantôme: {self.diameter_mes_mm:.1f} mm')
         self.text_info_area.insert("end", f'\nDiamètre interne fantôme: {self.internal_diameter_mm:.1f} mm \n')
@@ -462,7 +453,7 @@ class CT_quality:
     
     def apply_rois_to_all_images(self):
         if not self.dicom_images:
-            print("Aucune image disponible pour appliquer les ROIs.")
+            self.text_info_area.insert("end", "Aucune image disponible pour appliquer les ROIs.")
             return
 
         # Dictionnaires pour stocker les ROIs de chaque image
@@ -476,7 +467,7 @@ class CT_quality:
             try:
                 # Vérifie si les masques sont bien définis
                 if not hasattr(self, "mask_central_roi") or self.mask_central_roi is None:
-                    print(f"Masques non définis pour {image_name}. Exécutez find_contour() en premier.")
+                    self.text_info_area.insert("end", f"Masques non définis pour {image_name}. Exécutez find_contour() en premier.")
                     continue
             
                 # Appliquer les masques sur chaque image
@@ -486,11 +477,9 @@ class CT_quality:
                 self.external_roi_E[image_name] = image_data[self.mask_external_E_roi]
                 self.external_roi_W[image_name] = image_data[self.mask_external_W_roi]
 
-                print(f"ROIs appliquées avec succès sur {image_name}")
-
             except Exception as e:
-                print(f"Erreur lors de l'application des ROIs sur {image_name}: {e}")  
-    
+                self.text_info_area.insert("end", f"Erreur lors de l'application des ROIs sur {image_name}: {e}")
+                                
     # Fonction pour réaliser la mesure des ROIs et enregistrer les données sous forme de dataframe
     def analyze(self):
         
@@ -536,6 +525,7 @@ class CT_quality:
             ],
         }
         self.df_short_results = pd.DataFrame(short_results)
+        
         # Dictionnaire pour créer un dataframe pour les données Dicom et d'analyse
         data = {
             "Appareil": [self.device],
@@ -561,7 +551,7 @@ class CT_quality:
 
     def analyze_all_images(self):
         if not self.dicom_images:
-            print("Aucune image à analyser.")
+            self.text_info_area.insert("end", "Aucune image à analyser.")
             return
 
         # Initialiser une liste pour stocker les résultats de chaque image
@@ -579,7 +569,7 @@ class CT_quality:
             try:
                 # Vérifier si les ROIs existent pour cette image
                 if image_name not in self.central_roi:
-                    print(f"ROIs non disponibles pour {image_name}. Assurez-vous que apply_rois_to_all_images() a été exécutée.")
+                    self.text_info_area.insert("end", f"ROIs non disponibles pour {image_name}. Assurez-vous que apply_rois_to_all_images() a été exécutée.")
                     continue
                 
                 # Calculer les statistiques pour cette image
@@ -607,7 +597,7 @@ class CT_quality:
                 
                 # Ajouter les résultats de cette image à la liste
                 results_list.append({
-                    "Image": f'{int(self.dicom_metadata.get(image_name, {}).get('Tension', 'Inconnu'))}',
+                    "Image": f"{int(self.dicom_metadata.get(image_name, {}).get('Tension', 'Inconnu'))}",
                     "NCT Centre": self.n_ct_center,
                     "Bruit Centre": self.sigma_ct_center,
                     "NCT Haut": self.n_ct_lateral_N,
@@ -618,8 +608,15 @@ class CT_quality:
                     })
                 
             except Exception as e:
-                print(f"Erreur lors de l'analyse de {image_name}: {e}")
-                    
+                self.text_info_area.insert("end", f"Erreur lors de l'analyse de {image_name}: {e}")
+                
+            # Ajout des paramètres d'analyse dans le dataframe de données 
+            self.df_data.loc["Date analyse"] = datetime.now().date().strftime("%d/%m/%Y")
+            self.df_data.loc["Diamètre fantôme (mm)"] =  f'{self.diameter_mes_mm:.1f}'
+            self.df_data.loc["Diamètre interne fantôme (mm)"] = f'{self.internal_diameter_mm:.1f}'
+            self.df_data.loc["Epaisseur paroi (mm)"] = self.internal_margin
+            self.df_data.loc["Offset ROIs externes (mm)"] = self.external_roi_offset
+                
         # Convertir la liste en DataFrame
         self.df_results = pd.DataFrame(results_list)
         self.df_results = self.df_results.T
@@ -628,13 +625,13 @@ class CT_quality:
         self.df_results.loc["Image"] = pd.to_numeric(self.df_results.loc["Image"], errors='coerce')
         sorted_columns = self.df_results.loc["Image"].sort_values(ascending=True).index
         self.df_results = self.df_results[sorted_columns]
-
+        
         # Fixe le format des données dans les dataframes 
         pd.options.display.float_format = "{:,.2f}".format
         
         # Afficher les résultats dans la zone de texte 
         self.display_resultsV2()
-                    
+                            
     def display_resultsV2(self):
         
         if None in [self.n_ct_center, self.sigma_ct_center, self.n_ct_lateral_N, self.sigma_ct_lateral_N, 
@@ -673,6 +670,8 @@ class CT_quality:
         self.internal_margin = float(self.entry_value_internal_margin.get())
         self.display_info()
         self.find_contour()
+        self.apply_rois_to_all_images()
+        self.display_image_rois()
     
     # Fonction pour récupérer la valeur donnée par l'utilisateur pour la marge externe 
     def get_external_roi_offset(self):
@@ -680,6 +679,8 @@ class CT_quality:
         self.external_roi_offset = float(self.entry_value_offset.get())
         self.display_info()
         self.find_contour()
+        self.apply_rois_to_all_images()
+        self.display_image_rois()
  
     # Fonction pour sauvegarder l'image et les ROIs sous forme de png 
     def save_figure(self):
@@ -698,13 +699,13 @@ class CT_quality:
         axs[0].axis("off")
                    
         axs[1].imshow(self.image, cmap=plt.cm.gray)
-        axs[1].contour(self.phantom, colors='red')#, labels='Contour fantôme détecté')#, linewidth=1)
-        axs[1].contour(self.internal_phantom, colors='orange')#, labels='Contour fantôme détecté')#, linewidth=1)
-        axs[1].contour(self.mask_central_roi, colors='blue')#, linewidth=1)
-        axs[1].contour(self.mask_external_N_roi, colors='blue')#, linewidth=1)
-        axs[1].contour(self.mask_external_S_roi, colors='blue')#, linewidth=1)
-        axs[1].contour(self.mask_external_E_roi, colors='blue')#, linewidth=1)
-        axs[1].contour(self.mask_external_W_roi, colors='blue')#, linewidth=1)
+        axs[1].contour(self.phantom, colors='red')
+        axs[1].contour(self.internal_phantom, colors='orange')
+        axs[1].contour(self.mask_central_roi, colors='blue')
+        axs[1].contour(self.mask_external_N_roi, colors='blue')
+        axs[1].contour(self.mask_external_S_roi, colors='blue')
+        axs[1].contour(self.mask_external_E_roi, colors='blue')
+        axs[1].contour(self.mask_external_W_roi, colors='blue')
         axs[1].scatter(self.phantom_center[1], self.phantom_center[0], color='green', label='Centre')
         axs[1].set_title("Détection du contour et ROIs", size=20)
         axs[1].axis("off")
@@ -719,16 +720,17 @@ class CT_quality:
         if self.dicom_data is not None and hasattr(self.dicom_data, 'pixel_array'):
             # Créer une figure Matplotlib
             if not self.dicom_images:
-                print("Aucune image DICOM à afficher.")
+                self.text_info_area.insert("end", "Aucune image DICOM à afficher")
                 return
                 
             num_images = len(self.dicom_images)
             # S'assurer qu'il y a au moins une image avant de créer la figure
             if num_images == 0:
-                print("Erreur : aucune image à afficher.")
+                self.text_info_area.insert("end", "Erreur: aucune image à afficher")
                 return
-            fig, axes = plt.subplots(1, num_images, figsize=(20, 20))
-            plt.rc('font', size=20)
+            
+            fig, axes = plt.subplots(1, num_images, figsize=(40, 40))
+            plt.rc('font', size=40)
             self.legend_patches = [
                 mpatches.Patch(color='red', label='Contour fantôme détecté'),
                 mpatches.Patch(color='orange', label='Contour interne'),
@@ -739,7 +741,26 @@ class CT_quality:
             if num_images == 1:
                 axes = [axes]
             for ax, (image_name, pixel_array) in zip(axes, self.dicom_images.items()):
-                ax.imshow(pixel_array, cmap='gray')
+                ax.imshow(pixel_array, cmap='gray', vmin=self.min_val, vmax=self.max_val)
+                tension = self.dicom_metadata.get(image_name, {}).get('Tension', 'Inconnu')
+                ax.set_title(f"{tension} kV")
+                ax.legend(handles=self.legend_patches, fontsize=10)
+                ax.axis('off')
+            plt.tight_layout()
+            
+            fig1, axes = plt.subplots(1, num_images, figsize=(40, 40))
+            plt.rc('font', size=40)
+            self.legend_patches = [
+                mpatches.Patch(color='red', label='Contour fantôme détecté'),
+                mpatches.Patch(color='orange', label='Contour interne'),
+                mpatches.Patch(color='blue', label='Contours ROIs'),
+                plt.Line2D([], [], color='green', marker='o', linestyle='None', markersize=3, label='Centre')
+            ]
+            # Gérer le cas où il n'y a qu'une seule image
+            if num_images == 1:
+                axes = [axes]
+            for ax, (image_name, pixel_array) in zip(axes, self.dicom_images.items()):
+                ax.imshow(pixel_array, cmap='gray', vmin=self.min_val, vmax=self.max_val)
                 ax.scatter(self.phantom_center[1], self.phantom_center[0], color='green', label='Centre')
                 ax.contour(self.phantom, colors='red')
                 ax.contour(self.internal_phantom, colors='orange')
@@ -749,15 +770,19 @@ class CT_quality:
                 ax.contour(self.mask_external_E_roi, colors='blue', linewidths=1)
                 ax.contour(self.mask_external_W_roi, colors='blue', linewidths=1)
                 tension = self.dicom_metadata.get(image_name, {}).get('Tension', 'Inconnu')
-                ax.set_title(f"Image DICOM : {tension} kV")
-                ax.legend(handles=self.legend_patches, fontsize=5)
+                ax.set_title(f"{tension} kV")
+                ax.legend(handles=self.legend_patches, fontsize=10)
                 ax.axis('off')
             plt.tight_layout()
             
-            self.png_file = f"CT_image_quality_{self.device}_{self.institution}_{datetime.now().date()}_ROIs.png"
+            self.png_file = f"CT_image_quality_{self.device}_{self.institution}_{datetime.now().date()}_Artefacts.png"
             self.png_path = os.path.join(self.path, self.png_file)
             
+            self.png_file1 = f"CT_image_quality_{self.device}_{self.institution}_{datetime.now().date()}_ROIs.png"
+            self.png_path1 = os.path.join(self.path, self.png_file1)
+            
             fig.savefig(f"{self.png_path}")
+            fig1.savefig(f"{self.png_path1}")
         else:
             self.text_info_area.insert("end", "Aucune image trouvée dans ce fichier DICOM.\n")
     
@@ -766,15 +791,18 @@ class CT_quality:
         self.path = filedialog.askdirectory()
         self.excel_file = f"CT_image_quality_{self.device}_{self.institution}_{datetime.now().date()}.xlsx"
         self.save_path = os.path.join(self.path, self.excel_file)
+        
+        # 2 chiffres significatifs pour les données 
+        self.df_results1 = self.df_results.round(2)
                 
         try:
             # Sauvegarde des DataFrames dans un fichier Excel avec plusieurs feuilles
             with pd.ExcelWriter(self.save_path, engine="openpyxl") as writer:
-                #self.df_short_results.to_excel(writer, sheet_name="Résultats à copier", index=False)
-                self.df_results.to_excel(writer, sheet_name="Résultats")
-                self.df_data.to_excel(writer, sheet_name="Données")
+                self.df_results1.to_excel(writer, sheet_name="Résultats")
+                self.df_data.iloc[:, [1]].to_excel(writer, sheet_name="Données")                   
             self.save_image_rois()
             self.text_info_area.insert("end", "Données sauvegardées\n")
+            
         except Exception as e:
             self.text_info_area.insert("end", f"Erreur lors de la sauvegarde : {str(e)}\n")
         
