@@ -265,31 +265,11 @@ class CT_quality:
         self.text_info_area.insert("end", f'Site: {self.dicom_metadata[self.image_name]["Institution"]} \nConstructeur: {self.dicom_metadata[self.image_name]["Manufacturer"]} \nModèle: {self.dicom_metadata[self.image_name]["Device"]} \nNom: {self.dicom_metadata[self.image_name]["Name"]} \nCoupe: {self.dicom_metadata[self.image_name]["Slice_number"]} \nDate de mesure: {self.dicom_metadata[self.image_name]["Date"]} \n\nEpaisseur paroi: {self.internal_margin} mm \nOffset ROI latérales: {self.external_roi_offset} mm \n')
 
     # Fonction pour afficher les données Dicom
-    def display_dicom_tag(self):
+    def display_dicom_tag(self): 
         self.text_area.delete("1.0", "end")  # Efface le texte précédent
         for elem in self.dicom_data:
             self.text_area.insert("end", f"{elem}\n")
-            
-    # Fonction pour lire et récupérer les informations importantes des tags Dicom 
-    def read_dicom_tag(self):
-        self.device = self.dicom_data[0x0008, 0x1090].value
-        self.manufacturer = self.dicom_data[0x0008, 0x0070].value
-        self.institution =self.dicom_data[0x0008, 0x0080].value
-        self.name = self.dicom_data[0x0008, 0x1010].value
-        self.tension = self.dicom_data[0x0018, 0x0060].value
-        self.date = datetime.strptime(self.dicom_data[0x0008, 0x0020].value, "%Y%m%d")
-        self.date = self.date.strftime("%d/%m/%Y")
-        self.size_x = self.dicom_data[0x0028, 0x0011].value
-        self.size_y = self.dicom_data[0x0028, 0x0010].value
-        self.pixel_spacing = self.dicom_data[0x0028, 0x0030].value
-        self.slice_number = self.dicom_data[0x0020, 0x0013].value
-        
-        # Utiliser la marge présente dans le dictionnaire si le constructeur existe 
-        if str(self.manufacturer) in self.phantom_dict.keys(): 
-            self.internal_margin = self.phantom_dict[str(self.manufacturer)]
-        else:
-            self.internal_margin = 0
-            
+
     # Fonction pour lire et récupérer les informations importantes des tags Dicom 
     def set_dicom_tag(self):
         # Extrait les champs DICOM souhaités
@@ -299,10 +279,14 @@ class CT_quality:
             "Institution": self.dicom_data[0x0008, 0x0080].value,
             "Name": self.dicom_data[0x0008, 0x1010].value,
             "Tension": self.dicom_data[0x0018, 0x0060].value,
+            "Total Collimation": self.dicom_data[0x0018, 0x9307].value,
+            "Single Collimation": self.dicom_data[0x0018, 0x9306].value,
             "Date": datetime.strptime(self.dicom_data[0x0008, 0x0020].value, "%Y%m%d").strftime("%d/%m/%Y"),
             "Size_x": self.dicom_data[0x0028, 0x0011].value,
             "Size_y": self.dicom_data[0x0028, 0x0010].value,
             "Pixel_spacing": self.dicom_data[0x0028, 0x0030].value,
+            "Slice_thickness": self.dicom_data[0x0018, 0x0050].value,
+            "Slice_spacing": self.dicom_data[0x0018, 0x0088].value,
             "Slice_number": self.dicom_data[0x0020, 0x0013].value,
         }
         
@@ -319,28 +303,7 @@ class CT_quality:
             self.internal_margin = self.phantom_dict[str(self.dicom_metadata[self.image_name]["Manufacturer"])]
         else:
             self.internal_margin = 0
-                    
-    # Fonction pour afficher l'image sélectionnée 
-    def display_image(self):
-        if self.dicom_data is not None and hasattr(self.dicom_data, 'pixel_array'):
-            # Créer une figure Matplotlib
-            fig, ax = plt.subplots(figsize=(20, 20))
-            plt.rc('font', size=10)
-            ax.imshow(self.image, cmap=plt.cm.gray)
-            ax.set_title(f'{self.name},\n {self.manufacturer}, {self.device}, {self.tension} kV')
-            ax.axis("off")
-
-            # Nettoyer l'affichage précédent
-            for widget in self.image_frame.winfo_children():
-                widget.destroy()
-
-            # Intégrer l'image dans Tkinter
-            self.canvas = FigureCanvasTkAgg(fig, master=self.image_frame)
-            self.canvas.draw()
-            self.canvas.get_tk_widget().pack(fill="both", expand=True)
-        else:
-            self.text_info_area.insert("end", "Aucune image trouvée dans ce fichier DICOM.\n")
-            
+    
     # Fonction pour afficher l'image sélectionnée 
     def display_image_rois(self):
         if self.dicom_data is not None and hasattr(self.dicom_data, 'pixel_array'):
@@ -479,75 +442,6 @@ class CT_quality:
 
             except Exception as e:
                 self.text_info_area.insert("end", f"Erreur lors de l'application des ROIs sur {image_name}: {e}")
-                                
-    # Fonction pour réaliser la mesure des ROIs et enregistrer les données sous forme de dataframe
-    def analyze(self):
-        
-        self.n_ct_center = np.mean(self.central_roi)
-        self.sigma_ct_center = np.std(self.central_roi)
-
-        self.n_ct_lateral_N = np.mean(self.external_roi_N)
-        self.sigma_ct_lateral_N = np.std(self.external_roi_N)
-
-        self.n_ct_lateral_S = np.mean(self.external_roi_S)
-        self.sigma_ct_lateral_S = np.std(self.external_roi_S)
-
-        self.n_ct_lateral_E = np.mean(self.external_roi_E)
-        self.sigma_ct_lateral_E = np.std(self.external_roi_E)
-
-        self.n_ct_lateral_W = np.mean(self.external_roi_W)
-        self.sigma_ct_lateral_W = np.std(self.external_roi_W)
-        
-        self.unif = abs(max([abs(self.n_ct_center-self.n_ct_lateral_N), abs(self.n_ct_center-self.n_ct_lateral_S), abs(self.n_ct_center-self.n_ct_lateral_E), abs(self.n_ct_center-self.n_ct_lateral_W)]))
-
-        self.display_results()
-        
-        # Dictionnaire pour créer un dataframe pour les résultats complets
-        results = {
-            "Region": ["Centrale", "Lateral_N", "Lateral_S", "Lateral_E", "Lateral_W"],
-            "Moyenne": [
-                self.n_ct_center, self.n_ct_lateral_N, self.n_ct_lateral_S,
-                self.n_ct_lateral_E, self.n_ct_lateral_W
-            ],
-            "Écart-type": [
-                self.sigma_ct_center, self.sigma_ct_lateral_N, self.sigma_ct_lateral_S,
-                self.sigma_ct_lateral_E, self.sigma_ct_lateral_W
-            ]
-        }
-        self.df_results = pd.DataFrame(results)
-        self.df_results["Uniformité"] = [self.unif] + [None] * 4  # Ajouter la valeur de l'uniformité à la première ligne seulement
-        
-        # Dictionnaire pour créer un dataframe pour les résultats à copier 
-        short_results = {
-            "Region": ["NCT centre", "Bruit Centre", "NCT Haut", "NCT Droit", "NCT Bas", "NCT Gauche"],
-            "Value": [
-                self.n_ct_center, self.sigma_ct_center, self.n_ct_lateral_N, self.n_ct_lateral_E, self.n_ct_lateral_S, self.n_ct_lateral_W
-            ],
-        }
-        self.df_short_results = pd.DataFrame(short_results)
-        
-        # Dictionnaire pour créer un dataframe pour les données Dicom et d'analyse
-        data = {
-            "Appareil": [self.device],
-            "Fabricant": [self.manufacturer],
-            "Institution": [self.institution],
-            "Nom": [self.name],
-            "Tension (kV)": [self.tension],
-            "Taille X": [self.size_x],
-            "Taille Y": [self.size_y],
-            "Pixel Spacing": [str(self.pixel_spacing)],
-            "Numéro Slice": [self.slice_number],
-            "Date Acquisition": [self.date],
-            "Date Analyse": [datetime.now().date().strftime("%d/%m/%Y")],
-            "Diamètre fantôme (mm)": [f'{self.diameter_mes_mm:.1f}'],
-            "Diamètre interne fantôme (mm)": [f'{self.internal_diameter_mm:.1f}'],
-            "Epaisseur paroi (mm)": [self.internal_margin],
-            "Offset ROIs externes (mm)": [self.external_roi_offset],
-        }
-        self.df_data = pd.DataFrame(data)
-        self.df_data = self.df_data.T
-        self.df_data.reset_index(inplace=True)  # Transformer l'index en colonne
-        self.df_data.columns = ["Paramètre", "Valeur"]  # Renommer les colonnes
 
     def analyze_all_images(self):
         if not self.dicom_images:
@@ -643,11 +537,6 @@ class CT_quality:
         self.result_area.delete("1.0", "end")
         self.result_area.insert("end", self.df_results)
 
-    # Fonction pour afficher les résultats après la mesure 
-    def display_results(self):
-        self.result_area.delete("1.0", "end")  # Efface le texte précédent
-        self.result_area.insert("end", f'N CT Centre:  {self.n_ct_center:.3f},  STD:  {self.sigma_ct_center:.3f} \nN CT Nord:     {self.n_ct_lateral_N:.3f},  STD:  {self.sigma_ct_lateral_N:.3f} \nN CT Sud:      {self.n_ct_lateral_S:.3f},  STD:  {self.sigma_ct_lateral_S:.3f} \nN CT Est:      {self.n_ct_lateral_E:.3f},  STD:  {self.sigma_ct_lateral_E:.3f} \nN CT Ouest:    {self.n_ct_lateral_W:.3f},  STD:  {self.sigma_ct_lateral_W:.3f} \nUniformité: {self.unif:.2f}\n')
-        
     # Fonction pour créer une ROI circulaire avec une taille de matrice, la position du centre et le rayon 
     def create_circular_roi(self, size, center, radius):
         y, x = np.ogrid[:size[0], :size[1]]
@@ -681,41 +570,7 @@ class CT_quality:
         self.find_contour()
         self.apply_rois_to_all_images()
         self.display_image_rois()
- 
-    # Fonction pour sauvegarder l'image et les ROIs sous forme de png 
-    def save_figure(self):
-        fig, axs = plt.subplots(1, 2, figsize=(40, 20))
-        plt.rc('font', size=30)
-        
-        self.legend_patches = [
-            mpatches.Patch(color='red', label='Contour fantôme détecté'),
-            mpatches.Patch(color='orange', label='Contour interne'),
-            mpatches.Patch(color='blue', label='Contours ROIs'),
-            plt.Line2D([], [], color='green', marker='o', linestyle='None', markersize=3, label='Centre')
-        ]
-        
-        axs[0].imshow(self.image, cmap=plt.cm.gray)
-        axs[0].set_title(f'{self.name},\n {self.manufacturer}, {self.device}, {self.tension} kV', size=25)
-        axs[0].axis("off")
-                   
-        axs[1].imshow(self.image, cmap=plt.cm.gray)
-        axs[1].contour(self.phantom, colors='red')
-        axs[1].contour(self.internal_phantom, colors='orange')
-        axs[1].contour(self.mask_central_roi, colors='blue')
-        axs[1].contour(self.mask_external_N_roi, colors='blue')
-        axs[1].contour(self.mask_external_S_roi, colors='blue')
-        axs[1].contour(self.mask_external_E_roi, colors='blue')
-        axs[1].contour(self.mask_external_W_roi, colors='blue')
-        axs[1].scatter(self.phantom_center[1], self.phantom_center[0], color='green', label='Centre')
-        axs[1].set_title("Détection du contour et ROIs", size=20)
-        axs[1].axis("off")
-        axs[1].legend(handles=self.legend_patches, fontsize=18)
-        
-        self.png_file = f"CT_image_quality_{self.device}_{self.institution}_{datetime.now().date()}_ROIs.png"
-        self.png_path = os.path.join(self.path, self.png_file)
-        
-        fig.savefig(f"{self.png_path}")
- 
+
     def save_image_rois(self):
         if self.dicom_data is not None and hasattr(self.dicom_data, 'pixel_array'):
             # Créer une figure Matplotlib
@@ -812,6 +667,19 @@ class CT_quality:
         self.text_info_area.delete("1.0", "end")  # Efface le texte précédent
         self.result_area.delete("1.0", "end")  # Efface le texte précédent
         
+        # Réinitialisation des variables 
+        self.dicom_files_by_directory = {}
+        self.directories_with_dicom = []
+        self.dicom_images = {}
+        self.dicom_images1 = {}
+        self.dicom_metadata = {}
+        self.images_names = []
+        self.central_roi = {}
+        self.external_roi_N = {}
+        self.external_roi_S = {}
+        self.external_roi_E = {}
+        self.external_roi_W = {}
+        
         # Suppression du texte rentré manuellement par l'utilisateur 
         self.entry_value_slice.delete(0, 'end')
         self.entry_value_internal_margin.delete(0, 'end')
@@ -823,6 +691,7 @@ class CT_quality:
         
         # Réinitialisation pour le choix de la coupe 
         self.slice = 0
+        self.num_image = 0
 
 # Application principale qui lance le programme 
 if __name__ == "__main__":
