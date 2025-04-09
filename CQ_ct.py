@@ -637,7 +637,18 @@ class CT_quality:
                     plt.rc('font', size=40)
                     ax.imshow(pixel_array, cmap='gray', vmin=self.min_val, vmax=self.max_val)
                     ax.set_title(f"{tension} kV")
-                    ax.legend(handles=self.legend_patches, fontsize=15)
+                    #ax.text(0.95, 0.05, f'{self.dicom_metadata[image_name]["Name"]}\n{self.dicom_metadata[image_name]["Manufacturer"]} - {self.dicom_metadata[image_name]["Device"]}\n{self.dicom_metadata[image_name]["Institution"]}\n{self.dicom_metadata[image_name]["Tension"]} kV\n{self.dicom_metadata[image_name]["Date"]}', color='white', fontsize=20, ha='right', va='bottom', bbox=dict(facecolor='black', alpha=0.5))
+                    ax.text(0.99, 0.01,
+                            f'{self.dicom_metadata[image_name]["Name"]}\n'
+                            f'{self.dicom_metadata[image_name]["Manufacturer"]}\n'
+                            f'{self.dicom_metadata[image_name]["Device"]}\n'
+                            f'{self.dicom_metadata[image_name]["Institution"]}\n'
+                            f'{self.dicom_metadata[image_name]["Tension"]} kV\n'
+                            f'{self.dicom_metadata[image_name]["Date"]}',
+                            color='white', fontsize=20, ha='right', va='bottom',
+                            bbox=dict(facecolor='black', alpha=0.5),
+                            transform=ax.transAxes)
+                    #ax.legend(handles=self.legend_patches, fontsize=15)
                     ax.axis('off')                  
                     
                     fig1, ax1 = plt.subplots(figsize=(20, 20))
@@ -660,6 +671,16 @@ class CT_quality:
                             ax1.text(center_x, center_y, roi_texts[roi_name], color='white', fontsize=20, ha='center', va='center', bbox=dict(facecolor='black', alpha=0.5))
                     
                     ax1.set_title(f"{tension} kV")
+                    ax1.text(0.99, 0.01,
+                            f'{self.dicom_metadata[image_name]["Name"]}\n'
+                            f'{self.dicom_metadata[image_name]["Manufacturer"]}\n'
+                            f'{self.dicom_metadata[image_name]["Device"]}\n'
+                            f'{self.dicom_metadata[image_name]["Institution"]}\n'
+                            f'{self.dicom_metadata[image_name]["Tension"]} kV\n'
+                            f'{self.dicom_metadata[image_name]["Date"]}',
+                            color='white', fontsize=20, ha='right', va='bottom',
+                            bbox=dict(facecolor='black', alpha=0.5),
+                            transform=ax.transAxes)
                     ax1.legend(handles=self.legend_patches, fontsize=15)
                     ax1.axis('off')                    
              
@@ -718,7 +739,6 @@ class CT_quality:
         self.external_roi_S = {}
         self.external_roi_E = {}
         self.external_roi_W = {}
-        
         
         # Suppression du texte rentré manuellement par l'utilisateur 
         self.entry_value_slice.delete(0, 'end')
