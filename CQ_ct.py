@@ -12,13 +12,13 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 import pydicom
-import time 
 import math
 import os
 from tkinter import ttk, filedialog, scrolledtext, Frame
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from ttkthemes import ThemedTk
 import matplotlib.patches as mpatches
+
 
 # Classe pour l'analyse de la qualité image du CQI scanner 
 class CT_quality:
@@ -40,9 +40,6 @@ class CT_quality:
         self.slice = 0
         self.total_slice_number = 0
         self.seuil = -500 # Seuillage en UH pour la détection du contour 
-        self.mean_radius = None # Rayon moyen du contour => rayon du fantôme détecté
-        self.roi_centrale_size = None # Taille de la ROI centrale 
-        self.roi_laterale_size = None # Taille des ROIs latérales
         self.internal_margin = 0 # Epaisseur de la paroi du fantôme
         self.external_roi_offset = 20 # Décalage des ROIs externes par rapport au contour interne du fantôme
         self.dicom_data = None  # Stocke les données DICOM chargées
@@ -65,10 +62,10 @@ class CT_quality:
         self.std_ct_lateral_W = None 
         self.unif = None    
         
+        # Dictionnaires et listes pour organiser les données
         self.dicom_files_by_directory = {}
         self.directories_with_dicom = []
         self.dicom_images = {}
-        self.dicom_images1 = {}
         self.dicom_metadata = {}
         self.images_names = []
         self.central_roi = {}
@@ -105,11 +102,11 @@ class CT_quality:
         self.button_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nw") 
         
         # Création d'une zone de texte pour afficher les métadonnées
-        self.text_info_area = scrolledtext.ScrolledText(self.text_frame, width=30, height=15)
+        self.text_info_area = scrolledtext.ScrolledText(self.text_frame, width=25, height=18)
         self.text_info_area.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
         
-        # Création d'une zone de texte pour afficher les métadonnées
-        self.result_area = scrolledtext.ScrolledText(self.text_frame, width=20, height=15)
+        # Création d'une zone de texte pour afficher les résultats
+        self.result_area = scrolledtext.ScrolledText(self.text_frame, width=25, height=18)
         self.result_area.grid(row=1, column=1, padx=10, pady=10, sticky="nsew")
         
         # ---- Label au-dessus de la première zone de texte ----
@@ -153,7 +150,7 @@ class CT_quality:
         self.get_value_button_internal_margin.grid(row=4, column=1, padx=10, pady=5)
                
         # ---- Champ de saisie pour entrer une valeur ----
-        self.entry_label = ttk.Label(self.button_frame, text="Offset ROIs (mm, par défaut Dist: 20 mm):")
+        self.entry_label = ttk.Label(self.button_frame, text="Offset ROIs (mm, par défaut 20 mm):")
         self.entry_label.grid(row=5, column=0, padx=10, pady=(5, 0), sticky="w")
         
         # Création d'un champ de saisie (Entry) pour l'utilisateur
@@ -303,6 +300,22 @@ class CT_quality:
             self.internal_margin = self.phantom_dict[str(self.dicom_metadata[self.image_name]["Manufacturer"])]
         else:
             self.internal_margin = 0
+    # Fonction pour trier les images par ordre de tension
+    def image_sort(self):
+        image_tension_list = [
+            (image_name, self.dicom_metadata.get(image_name, {}).get('Tension', 'Inconnu'))
+            for image_name in self.dicom_images.keys()
+            ]
+
+        # Convertir les tensions en float pour le tri, en ignorant les valeurs non numériques
+        image_tension_list = [
+            (image_name, float(tension)) if tension != 'Inconnu' else (image_name, float('inf'))
+            for image_name, tension in image_tension_list
+            ]
+
+        # Trier par tension croissante
+        image_tension_list.sort(key=lambda x: x[1])
+        return image_tension_list
     
     # Fonction pour afficher l'image sélectionnée 
     def display_image_rois(self):
@@ -329,12 +342,17 @@ class CT_quality:
                 mpatches.Patch(color='blue', label='Contours ROIs'),
                 plt.Line2D([], [], color='green', marker='o', linestyle='None', markersize=3, label='Centre')
             ]
+            
+            image_list = self.image_sort()
 
             axes = axes.flatten()
+            
             # Gérer le cas où il n'y a qu'une seule image
             if num_images == 1:
                 axes = [axes]
-            for ax, (image_name, pixel_array) in zip(axes, self.dicom_images.items()):
+                
+            for ax, (image_name, pixel_array) in zip(axes, image_list):
+                pixel_array = self.dicom_images[image_name]
                 ax.imshow(pixel_array, cmap='gray', vmin=self.min_val, vmax=self.max_val)
                 ax.scatter(self.phantom_center[1], self.phantom_center[0], color='green', label='Centre')
                 ax.contour(self.phantom, colors='red')
@@ -404,16 +422,8 @@ class CT_quality:
 
         self.text_info_area.insert("end", f'Diamètre fantôme: {self.diameter_mes_mm:.1f} mm')
         self.text_info_area.insert("end", f'\nDiamètre interne fantôme: {self.internal_diameter_mm:.1f} mm \n')
-        
-    # Application des ROIs sur toutes les images 
-    def apply_roi(self): 
-        # Création des ROIs en utilisant les mask sur l'image d'origine 
-        self.central_roi[self.image_name] = self.dicom_images[self.image_name][self.mask_central_roi]
-        self.external_roi_N[self.image_name] = self.dicom_images[self.image_name][self.mask_external_N_roi]
-        self.external_roi_S[self.image_name] = self.dicom_images[self.image_name][self.mask_external_S_roi]
-        self.external_roi_E[self.image_name] = self.dicom_images[self.image_name][self.mask_external_E_roi]
-        self.external_roi_W[self.image_name] = self.dicom_images[self.image_name][self.mask_external_W_roi]
-    
+      
+    # Fonction qui applique les ROIs sur toutes les images 
     def apply_rois_to_all_images(self):
         if not self.dicom_images:
             self.text_info_area.insert("end", "Aucune image disponible pour appliquer les ROIs.")
@@ -491,14 +501,19 @@ class CT_quality:
                 
                 # Ajouter les résultats de cette image à la liste
                 results_list.append({
-                    "Image": f"{int(self.dicom_metadata.get(image_name, {}).get('Tension', 'Inconnu'))}",
+                    "Image": image_name,
+                    "Tension": f"{int(self.dicom_metadata.get(image_name, {}).get('Tension', 'Inconnu'))}",
                     "NCT Centre": self.n_ct_center,
                     "Bruit Centre": self.sigma_ct_center,
                     "NCT Haut": self.n_ct_lateral_N,
                     "NCT Droit": self.n_ct_lateral_E,
                     "NCT Bas": self.n_ct_lateral_S,
                     "NCT Gauche": self.n_ct_lateral_W,
-                    "Uniformité": self.unif
+                    "Uniformité": self.unif,
+                    "Bruit Haut": self.sigma_ct_lateral_N,
+                    "Bruit Droit": self.sigma_ct_lateral_E,
+                    "Bruit Bas": self.sigma_ct_lateral_S,
+                    "Bruit Gauche": self.sigma_ct_lateral_W,
                     })
                 
             except Exception as e:
@@ -514,27 +529,28 @@ class CT_quality:
         # Convertir la liste en DataFrame
         self.df_results = pd.DataFrame(results_list)
         self.df_results = self.df_results.T
-
-        # Tri des colonnes du dataframe selon la tension 
-        self.df_results.loc["Image"] = pd.to_numeric(self.df_results.loc["Image"], errors='coerce')
-        sorted_columns = self.df_results.loc["Image"].sort_values(ascending=True).index
-        self.df_results = self.df_results[sorted_columns]
         
+        # Tri des colonnes du dataframe selon la tension 
+        self.df_results.loc["Tension"] = pd.to_numeric(self.df_results.loc["Tension"], errors='coerce')
+        sorted_columns = self.df_results.loc["Tension"].sort_values(ascending=True).index
+        self.df_results = self.df_results[sorted_columns]
+        self.df_results.columns = self.df_results.loc['Tension'].values
+
         # Fixe le format des données dans les dataframes 
         pd.options.display.float_format = "{:,.2f}".format
         
         # Afficher les résultats dans la zone de texte 
-        self.display_resultsV2()
-                            
-    def display_resultsV2(self):
+        self.display_results()
         
+    # Fonction qui affiche les résultats dans la zone de texte                        
+    def display_results(self):
+        self.result_area.delete("1.0", "end")
         if None in [self.n_ct_center, self.sigma_ct_center, self.n_ct_lateral_N, self.sigma_ct_lateral_N, 
                 self.n_ct_lateral_S, self.sigma_ct_lateral_S, self.n_ct_lateral_E, self.sigma_ct_lateral_E, 
                 self.n_ct_lateral_W, self.sigma_ct_lateral_W, self.unif]:
-            print("Certaines valeurs sont manquantes, veuillez vérifier l'analyse.")
+            self.result_area.insert("end", "Certaines valeurs sont manquantes, veuillez vérifier l'analyse.")
             return
         
-        self.result_area.delete("1.0", "end")
         self.result_area.insert("end", self.df_results)
 
     # Fonction pour créer une ROI circulaire avec une taille de matrice, la position du centre et le rayon 
@@ -570,7 +586,8 @@ class CT_quality:
         self.find_contour()
         self.apply_rois_to_all_images()
         self.display_image_rois()
-
+            
+    # Sauvegarde des images seule (artéfacts) et des images avec les ROIs 
     def save_image_rois(self):
         if self.dicom_data is not None and hasattr(self.dicom_data, 'pixel_array'):
             # Créer une figure Matplotlib
@@ -578,92 +595,115 @@ class CT_quality:
                 self.text_info_area.insert("end", "Aucune image DICOM à afficher")
                 return
                 
-            num_images = len(self.dicom_images)
-            # S'assurer qu'il y a au moins une image avant de créer la figure
-            if num_images == 0:
-                self.text_info_area.insert("end", "Erreur: aucune image à afficher")
-                return
-            
-            fig, axes = plt.subplots(1, num_images, figsize=(40, 40))
-            plt.rc('font', size=40)
             self.legend_patches = [
                 mpatches.Patch(color='red', label='Contour fantôme détecté'),
                 mpatches.Patch(color='orange', label='Contour interne'),
                 mpatches.Patch(color='blue', label='Contours ROIs'),
                 plt.Line2D([], [], color='green', marker='o', linestyle='None', markersize=3, label='Centre')
             ]
-            # Gérer le cas où il n'y a qu'une seule image
-            if num_images == 1:
-                axes = [axes]
-            for ax, (image_name, pixel_array) in zip(axes, self.dicom_images.items()):
-                ax.imshow(pixel_array, cmap='gray', vmin=self.min_val, vmax=self.max_val)
-                tension = self.dicom_metadata.get(image_name, {}).get('Tension', 'Inconnu')
-                ax.set_title(f"{tension} kV")
-                ax.legend(handles=self.legend_patches, fontsize=10)
-                ax.axis('off')
-            plt.tight_layout()
             
-            fig1, axes = plt.subplots(1, num_images, figsize=(40, 40))
-            plt.rc('font', size=40)
-            self.legend_patches = [
-                mpatches.Patch(color='red', label='Contour fantôme détecté'),
-                mpatches.Patch(color='orange', label='Contour interne'),
-                mpatches.Patch(color='blue', label='Contours ROIs'),
-                plt.Line2D([], [], color='green', marker='o', linestyle='None', markersize=3, label='Centre')
-            ]
-            # Gérer le cas où il n'y a qu'une seule image
-            if num_images == 1:
-                axes = [axes]
-            for ax, (image_name, pixel_array) in zip(axes, self.dicom_images.items()):
-                ax.imshow(pixel_array, cmap='gray', vmin=self.min_val, vmax=self.max_val)
-                ax.scatter(self.phantom_center[1], self.phantom_center[0], color='green', label='Centre')
-                ax.contour(self.phantom, colors='red')
-                ax.contour(self.internal_phantom, colors='orange')
-                ax.contour(self.mask_central_roi, colors='blue', linewidths=1)
-                ax.contour(self.mask_external_N_roi, colors='blue', linewidths=1)
-                ax.contour(self.mask_external_S_roi, colors='blue', linewidths=1,)
-                ax.contour(self.mask_external_E_roi, colors='blue', linewidths=1)
-                ax.contour(self.mask_external_W_roi, colors='blue', linewidths=1)
-                tension = self.dicom_metadata.get(image_name, {}).get('Tension', 'Inconnu')
-                ax.set_title(f"{tension} kV")
-                ax.legend(handles=self.legend_patches, fontsize=10)
-                ax.axis('off')
-            plt.tight_layout()
-            
-            self.png_file = f"CT_image_quality_{self.device}_{self.institution}_{datetime.now().date()}_Artefacts.png"
-            self.png_path = os.path.join(self.path, self.png_file)
-            
-            self.png_file1 = f"CT_image_quality_{self.device}_{self.institution}_{datetime.now().date()}_ROIs.png"
-            self.png_path1 = os.path.join(self.path, self.png_file1)
-            
-            fig.savefig(f"{self.png_path}")
-            fig1.savefig(f"{self.png_path1}")
+            # Sauvegarde des images individuellement 
+            for image_name, pixel_array in self.dicom_images.items():
+                try:
+                    tension = self.dicom_metadata.get(image_name, {}).get('Tension', 'Inconnu')
+                    
+                    # Récupération des infos et résultats des ROIs pour les afficher sur les images
+                    if int(tension) in self.df_results.columns:
+                        results = self.df_results[int(tension)]
+
+                        # Récupéraion des ROIs
+                        rois = {
+                            'Central': self.mask_central_roi,
+                            'External N': self.mask_external_N_roi,
+                            'External S': self.mask_external_S_roi,
+                            'External E': self.mask_external_E_roi,
+                            'External W': self.mask_external_W_roi
+                            }
+                            
+                        # Text à afficher au niveau des ROIs
+                        roi_texts = {
+                            'Central': f"NCT: {results['NCT Centre']:.2f} \nBruit: {results['Bruit Centre']:.2f}",
+                            'External N': f"NCT: {results['NCT Haut']:.2f} \nBruit: {results['Bruit Haut']:.2f}",
+                            'External S': f"NCT: {results['NCT Bas']:.2f} \nBruit: {results['Bruit Bas']:.2f}",
+                            'External E': f"NCT: {results['NCT Droit']:.2f} \nBruit: {results['Bruit Droit']:.2f}",
+                            'External W': f"NCT: {results['NCT Gauche']:.2f} \nBruit: {results['Bruit Gauche']:.2f}"
+                            }
+                        
+                        # Positions décalée des texts par rapport aux ROIs
+                        roi_pos_x = {'Central': 20,'External N': 50, 'External S': 50, 'External E': 0, 'External W': 0 }
+                        roi_pos_y = {'Central': 20,'External N': 0, 'External S': 0, 'External E': 35, 'External W': 35 }
+                
+                    fig, ax = plt.subplots(figsize=(20, 20))
+                    plt.rc('font', size=40)
+                    ax.imshow(pixel_array, cmap='gray', vmin=self.min_val, vmax=self.max_val)
+                    ax.set_title(f"{tension} kV")
+                    ax.legend(handles=self.legend_patches, fontsize=15)
+                    ax.axis('off')                  
+                    
+                    fig1, ax1 = plt.subplots(figsize=(20, 20))
+                    ax1.imshow(pixel_array, cmap='gray', vmin=self.min_val, vmax=self.max_val)
+                    ax1.scatter(self.phantom_center[1], self.phantom_center[0], color='green', label='Centre')
+                    ax1.contour(self.phantom, colors='red', linewidths=2)
+                    ax1.contour(self.internal_phantom, colors='orange', linewidths=2)
+                    ax1.contour(self.mask_central_roi, colors='blue', linewidths=2)
+                    ax1.contour(self.mask_external_N_roi, colors='blue', linewidths=2)
+                    ax1.contour(self.mask_external_S_roi, colors='blue', linewidths=2)
+                    ax1.contour(self.mask_external_E_roi, colors='blue', linewidths=2)
+                    ax1.contour(self.mask_external_W_roi, colors='blue', linewidths=2)
+                    
+                    # Afficher les résultats des ROIs seulement si elles existent
+                    # Calculer la position moyenne de la ROI pour placer le texte
+                    for roi_name, roi_mask in rois.items():
+                        if np.any(roi_mask):  
+                            y, x = np.where(roi_mask)
+                            center_y, center_x = np.mean(y) + roi_pos_y[roi_name], np.mean(x) + roi_pos_x[roi_name]
+                            ax1.text(center_x, center_y, roi_texts[roi_name], color='white', fontsize=20, ha='center', va='center', bbox=dict(facecolor='black', alpha=0.5))
+                    
+                    ax1.set_title(f"{tension} kV")
+                    ax1.legend(handles=self.legend_patches, fontsize=15)
+                    ax1.axis('off')                    
+             
+                    self.png_file = f"CT_image_quality_{self.device}_{self.institution}_{tension}kV_{datetime.now().date()}_Artefacts.png"
+                    self.png_path = os.path.join(self.path, self.png_file)
+                    self.png_file1 = f"CT_image_quality_{self.device}_{self.institution}_{tension}kV_{datetime.now().date()}_ROIs.png"
+                    self.png_path1 = os.path.join(self.path, self.png_file1)
+                
+                    fig.savefig(f"{self.png_path}")
+                    fig1.savefig(f"{self.png_path1}")
+                    
+                    plt.close(fig)
+                    plt.close(fig1)
+                except Exception as e:
+                    self.text_info_area.insert("end", f"Erreur lors de la sauvegarde : {str(e)}\n")
+                        
         else:
             self.text_info_area.insert("end", "Aucune image trouvée dans ce fichier DICOM.\n")
     
     # Fonction pour sauvegarder les résultats dans un fichier excel et les images 
     def save_results(self):
         self.path = filedialog.askdirectory()
+        self.text_info_area.insert("end", "\nSauvegarde en cours ...\n")
+        self.root.update_idletasks()
+
         self.excel_file = f"CT_image_quality_{self.device}_{self.institution}_{datetime.now().date()}.xlsx"
         self.save_path = os.path.join(self.path, self.excel_file)
         
         # 2 chiffres significatifs pour les données 
         self.df_results1 = self.df_results.round(2)
-                
+        
         try:
             # Sauvegarde des DataFrames dans un fichier Excel avec plusieurs feuilles
             with pd.ExcelWriter(self.save_path, engine="openpyxl") as writer:
-                self.df_results1.to_excel(writer, sheet_name="Résultats")
+                self.df_results1.head(9).to_excel(writer, sheet_name="Résultats", float_format="%.2f")
                 self.df_data.iloc[:, [1]].to_excel(writer, sheet_name="Données")                   
             self.save_image_rois()
-            self.text_info_area.insert("end", "Données sauvegardées\n")
+            self.text_info_area.insert("end", "Sauvegarde terminée.\n")
             
         except Exception as e:
             self.text_info_area.insert("end", f"Erreur lors de la sauvegarde : {str(e)}\n")
         
-    # Fonction pour supprimer les infos et canvas pour sélectionner une autre image 
+    # Fonction pour réinitialiser l'interface, supprimer les infos, données et canvas pour sélectionner un nouveau dossier 
     def reinitialize(self):
-        # Suppression du texte dans les zones d'affichage de text
         self.text_info_area.delete("1.0", "end")  # Efface le texte précédent
         self.result_area.delete("1.0", "end")  # Efface le texte précédent
         
@@ -671,7 +711,6 @@ class CT_quality:
         self.dicom_files_by_directory = {}
         self.directories_with_dicom = []
         self.dicom_images = {}
-        self.dicom_images1 = {}
         self.dicom_metadata = {}
         self.images_names = []
         self.central_roi = {}
@@ -679,6 +718,7 @@ class CT_quality:
         self.external_roi_S = {}
         self.external_roi_E = {}
         self.external_roi_W = {}
+        
         
         # Suppression du texte rentré manuellement par l'utilisateur 
         self.entry_value_slice.delete(0, 'end')
@@ -695,10 +735,7 @@ class CT_quality:
 
 # Application principale qui lance le programme 
 if __name__ == "__main__":
-    start_time = time.time()
-    
+
     root = ThemedTk(theme="plastik")
     app = CT_quality(root)
     root.mainloop()
-    
-    duree = time.time()- start_time
