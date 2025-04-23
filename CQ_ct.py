@@ -102,11 +102,11 @@ class CT_quality:
         self.button_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nw") 
         
         # Création d'une zone de texte pour afficher les métadonnées
-        self.text_info_area = scrolledtext.ScrolledText(self.text_frame, width=25, height=18)
+        self.text_info_area = scrolledtext.ScrolledText(self.text_frame, width=15, height=16)
         self.text_info_area.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
         
         # Création d'une zone de texte pour afficher les résultats
-        self.result_area = scrolledtext.ScrolledText(self.text_frame, width=25, height=18)
+        self.result_area = scrolledtext.ScrolledText(self.text_frame, width=35, height=16)
         self.result_area.grid(row=1, column=1, padx=10, pady=10, sticky="nsew")
         
         # ---- Label au-dessus de la première zone de texte ----
@@ -173,8 +173,9 @@ class CT_quality:
         self.reinitialize_button = ttk.Button(self.button_frame, text="Réinitialiser", command=self.reinitialize)
         self.reinitialize_button.grid(row=8, column=1, pady=5)
            
+
     ############################# Déclaration des fonctions de la classe #################################
-    
+
     # Fonction pour sélectionner l'image Dicom de la coupe centrale (de l'image pas du fantôme) des images Dicom 
     # En assumant un fichier par coupe
     # Condition permettant de recharger l'image en sélectionnant le numéro d'une coupe 
@@ -258,7 +259,7 @@ class CT_quality:
     def display_info(self):
         self.text_info_area.delete("1.0", "end")  # Efface le texte précédent
         self.result_area.delete("1.0", "end")  # Efface le texte précédent
-        self.text_info_area.insert("end", f'Images trouvées: {self.images_names} \n\n')
+        self.text_info_area.insert("end", f'{len(self.images_names)-1} dossiers trouvés: {self.images_names[1:]} \n\n')
         self.text_info_area.insert("end", f'Site: {self.dicom_metadata[self.image_name]["Institution"]} \nConstructeur: {self.dicom_metadata[self.image_name]["Manufacturer"]} \nModèle: {self.dicom_metadata[self.image_name]["Device"]} \nNom: {self.dicom_metadata[self.image_name]["Name"]} \nCoupe: {self.dicom_metadata[self.image_name]["Slice_number"]} \nDate de mesure: {self.dicom_metadata[self.image_name]["Date"]} \n\nEpaisseur paroi: {self.internal_margin} mm \nOffset ROI latérales: {self.external_roi_offset} mm \n')
 
     # Fonction pour afficher les données Dicom
@@ -276,6 +277,7 @@ class CT_quality:
             "Institution": self.dicom_data[0x0008, 0x0080].value,
             "Name": self.dicom_data[0x0008, 0x1010].value,
             "Tension": self.dicom_data[0x0018, 0x0060].value,
+            "Serie": self.dicom_data[0x008,0x103E].value,
             "Total Collimation": self.dicom_data[0x0018, 0x9307].value,
             "Single Collimation": self.dicom_data[0x0018, 0x9306].value,
             "Date": datetime.strptime(self.dicom_data[0x0008, 0x0020].value, "%Y%m%d").strftime("%d/%m/%Y"),
@@ -326,15 +328,20 @@ class CT_quality:
                 return
                 
             num_images = len(self.dicom_images)
-            num_cols = 4
+            
+            # Adaptation automatique des figures en fonction du nombre d'images à afficher 
+            num_cols = min(4, num_images)
             num_rows = math.ceil(num_images / num_cols)
-    
+            
+            fig_width = 5 * num_cols
+            fig_height = 5 * num_rows
+            
             # S'assurer qu'il y a au moins une image avant de créer la figure
             if num_images == 0:
                 self.text_info_area.insert("end", "Erreur : aucune image à afficher.")
                 return
 
-            fig, axes = plt.subplots(num_rows, num_cols, figsize=(20, num_rows * 10))
+            fig, axes = plt.subplots(num_rows, num_cols, figsize=(fig_width, fig_height))
             plt.rc('font', size=10)
             self.legend_patches = [
                 mpatches.Patch(color='red', label='Contour fantôme détecté'),
@@ -345,13 +352,19 @@ class CT_quality:
             
             image_list = self.image_sort()
 
-            axes = axes.flatten()
-            
             # Gérer le cas où il n'y a qu'une seule image
             if num_images == 1:
-                axes = [axes]
+                axes = [axes]   
+            else:
+                axes = axes.flatten()
+            
+            # Affichage des images
+            for i, (image_name, _) in enumerate(image_list):
+                if i >= len(axes):
+                    break  # Sécurité si trop d'images vs axes
+                serie = self.dicom_metadata.get(image_name, {}).get('Serie', 'Inconnu')
                 
-            for ax, (image_name, pixel_array) in zip(axes, image_list):
+                ax = axes[i]
                 pixel_array = self.dicom_images[image_name]
                 ax.imshow(pixel_array, cmap='gray', vmin=self.min_val, vmax=self.max_val)
                 ax.scatter(self.phantom_center[1], self.phantom_center[0], color='green', label='Centre')
@@ -359,13 +372,17 @@ class CT_quality:
                 ax.contour(self.internal_phantom, colors='orange')
                 ax.contour(self.mask_central_roi, colors='blue', linewidths=1)
                 ax.contour(self.mask_external_N_roi, colors='blue', linewidths=1)
-                ax.contour(self.mask_external_S_roi, colors='blue', linewidths=1,)
+                ax.contour(self.mask_external_S_roi, colors='blue', linewidths=1)
                 ax.contour(self.mask_external_E_roi, colors='blue', linewidths=1)
                 ax.contour(self.mask_external_W_roi, colors='blue', linewidths=1)
-                tension = self.dicom_metadata.get(image_name, {}).get('Tension', 'Inconnu')
-                ax.set_title(f"{tension} kV")
+                ax.text(0.05, 0.05, f'{serie}', color='white', fontsize=7, fontweight='bold', ha='left', va='top')
                 ax.legend(handles=self.legend_patches, fontsize=5)
                 ax.axis('off')
+
+            # Masquer les axes vides restants
+            for j in range(i + 1, len(axes)):
+                axes[j].axis('off')
+
             plt.tight_layout()
             
             # Nettoyer l'affichage précédent
@@ -502,6 +519,7 @@ class CT_quality:
                 # Ajouter les résultats de cette image à la liste
                 results_list.append({
                     "Image": image_name,
+                    "Serie": f"{self.dicom_metadata.get(image_name, {}).get('Serie', 'Inconnu')}",
                     "Tension": f"{int(self.dicom_metadata.get(image_name, {}).get('Tension', 'Inconnu'))}",
                     "NCT Centre": self.n_ct_center,
                     "Bruit Centre": self.sigma_ct_center,
@@ -534,7 +552,8 @@ class CT_quality:
         self.df_results.loc["Tension"] = pd.to_numeric(self.df_results.loc["Tension"], errors='coerce')
         sorted_columns = self.df_results.loc["Tension"].sort_values(ascending=True).index
         self.df_results = self.df_results[sorted_columns]
-        self.df_results.columns = self.df_results.loc['Tension'].values
+        #self.df_results.columns = self.df_results.loc['Tension'].values
+        self.df_results.columns = self.df_results.loc['Serie'].values
 
         # Fixe le format des données dans les dataframes 
         pd.options.display.float_format = "{:,.2f}".format
@@ -605,12 +624,13 @@ class CT_quality:
             # Sauvegarde des images individuellement 
             for image_name, pixel_array in self.dicom_images.items():
                 try:
-                    tension = self.dicom_metadata.get(image_name, {}).get('Tension', 'Inconnu')
+                    serie = self.dicom_metadata.get(image_name, {}).get('Serie', 'Inconnu')
+
+                    self.df = self.df_results.T
                     
                     # Récupération des infos et résultats des ROIs pour les afficher sur les images
-                    if int(tension) in self.df_results.columns:
-                        results = self.df_results[int(tension)]
-
+                    if serie in self.df.index:
+                        results = self.df.loc[serie]
                         # Récupéraion des ROIs
                         rois = {
                             'Central': self.mask_central_roi,
@@ -633,12 +653,11 @@ class CT_quality:
                         roi_pos_x = {'Central': 20,'External N': 50, 'External S': 50, 'External E': 0, 'External W': 0 }
                         roi_pos_y = {'Central': 20,'External N': 0, 'External S': 0, 'External E': 35, 'External W': 35 }
                 
-                    fig, ax = plt.subplots(figsize=(20, 20))
-                    plt.rc('font', size=40)
-                    ax.imshow(pixel_array, cmap='gray', vmin=self.min_val, vmax=self.max_val)
-                    ax.set_title(f"{tension} kV")
-                    #ax.text(0.95, 0.05, f'{self.dicom_metadata[image_name]["Name"]}\n{self.dicom_metadata[image_name]["Manufacturer"]} - {self.dicom_metadata[image_name]["Device"]}\n{self.dicom_metadata[image_name]["Institution"]}\n{self.dicom_metadata[image_name]["Tension"]} kV\n{self.dicom_metadata[image_name]["Date"]}', color='white', fontsize=20, ha='right', va='bottom', bbox=dict(facecolor='black', alpha=0.5))
-                    ax.text(0.99, 0.01,
+                        fig, ax = plt.subplots(figsize=(20, 20))
+                        plt.rc('font', size=40)
+                        ax.imshow(pixel_array, cmap='gray', vmin=self.min_val, vmax=self.max_val)
+                        ax.set_title(f"{serie}")
+                        ax.text(0.99, 0.01,
                             f'{self.dicom_metadata[image_name]["Name"]}\n'
                             f'{self.dicom_metadata[image_name]["Manufacturer"]}\n'
                             f'{self.dicom_metadata[image_name]["Device"]}\n'
@@ -648,30 +667,30 @@ class CT_quality:
                             color='white', fontsize=20, ha='right', va='bottom',
                             bbox=dict(facecolor='black', alpha=0.5),
                             transform=ax.transAxes)
-                    #ax.legend(handles=self.legend_patches, fontsize=15)
-                    ax.axis('off')                  
+                        #ax.legend(handles=self.legend_patches, fontsize=15)
+                        ax.axis('off')                  
                     
-                    fig1, ax1 = plt.subplots(figsize=(20, 20))
-                    ax1.imshow(pixel_array, cmap='gray', vmin=self.min_val, vmax=self.max_val)
-                    ax1.scatter(self.phantom_center[1], self.phantom_center[0], color='green', label='Centre')
-                    ax1.contour(self.phantom, colors='red', linewidths=2)
-                    ax1.contour(self.internal_phantom, colors='orange', linewidths=2)
-                    ax1.contour(self.mask_central_roi, colors='blue', linewidths=2)
-                    ax1.contour(self.mask_external_N_roi, colors='blue', linewidths=2)
-                    ax1.contour(self.mask_external_S_roi, colors='blue', linewidths=2)
-                    ax1.contour(self.mask_external_E_roi, colors='blue', linewidths=2)
-                    ax1.contour(self.mask_external_W_roi, colors='blue', linewidths=2)
+                        fig1, ax1 = plt.subplots(figsize=(20, 20))
+                        ax1.imshow(pixel_array, cmap='gray', vmin=self.min_val, vmax=self.max_val)
+                        ax1.scatter(self.phantom_center[1], self.phantom_center[0], color='green', label='Centre')
+                        ax1.contour(self.phantom, colors='red', linewidths=2)
+                        ax1.contour(self.internal_phantom, colors='orange', linewidths=2)
+                        ax1.contour(self.mask_central_roi, colors='blue', linewidths=2)
+                        ax1.contour(self.mask_external_N_roi, colors='blue', linewidths=2)
+                        ax1.contour(self.mask_external_S_roi, colors='blue', linewidths=2)
+                        ax1.contour(self.mask_external_E_roi, colors='blue', linewidths=2)
+                        ax1.contour(self.mask_external_W_roi, colors='blue', linewidths=2)
                     
-                    # Afficher les résultats des ROIs seulement si elles existent
-                    # Calculer la position moyenne de la ROI pour placer le texte
-                    for roi_name, roi_mask in rois.items():
-                        if np.any(roi_mask):  
-                            y, x = np.where(roi_mask)
-                            center_y, center_x = np.mean(y) + roi_pos_y[roi_name], np.mean(x) + roi_pos_x[roi_name]
-                            ax1.text(center_x, center_y, roi_texts[roi_name], color='white', fontsize=20, ha='center', va='center', bbox=dict(facecolor='black', alpha=0.5))
+                        # Afficher les résultats des ROIs seulement si elles existent
+                        # Calculer la position moyenne de la ROI pour placer le texte
+                        for roi_name, roi_mask in rois.items():
+                            if np.any(roi_mask):  
+                                y, x = np.where(roi_mask)
+                                center_y, center_x = np.mean(y) + roi_pos_y[roi_name], np.mean(x) + roi_pos_x[roi_name]
+                                ax1.text(center_x, center_y, roi_texts[roi_name], color='white', fontsize=20, ha='center', va='center', bbox=dict(facecolor='black', alpha=0.5))
                     
-                    ax1.set_title(f"{tension} kV")
-                    ax1.text(0.99, 0.01,
+                        ax1.set_title(f"{serie}")
+                        ax1.text(0.99, 0.01,
                             f'{self.dicom_metadata[image_name]["Name"]}\n'
                             f'{self.dicom_metadata[image_name]["Manufacturer"]}\n'
                             f'{self.dicom_metadata[image_name]["Device"]}\n'
@@ -681,21 +700,21 @@ class CT_quality:
                             color='white', fontsize=20, ha='right', va='bottom',
                             bbox=dict(facecolor='black', alpha=0.5),
                             transform=ax.transAxes)
-                    ax1.legend(handles=self.legend_patches, fontsize=15)
-                    ax1.axis('off')                    
-             
-                    self.png_file = f"CT_image_quality_{self.device}_{self.institution}_{tension}kV_{datetime.now().date()}_Artefacts.png"
-                    self.png_path = os.path.join(self.path, self.png_file)
-                    self.png_file1 = f"CT_image_quality_{self.device}_{self.institution}_{tension}kV_{datetime.now().date()}_ROIs.png"
-                    self.png_path1 = os.path.join(self.path, self.png_file1)
-                
-                    fig.savefig(f"{self.png_path}")
-                    fig1.savefig(f"{self.png_path1}")
-                    
-                    plt.close(fig)
-                    plt.close(fig1)
+                        ax1.legend(handles=self.legend_patches, fontsize=15)
+                        ax1.axis('off')                    
+                        
+                        self.png_file = f"CT_image_quality_{self.device}_{self.institution}_{serie}_{datetime.now().date()}_Artefacts.png"
+                        self.png_path = os.path.join(self.path, self.png_file)
+                        self.png_file1 = f"CT_image_quality_{self.device}_{self.institution}_{serie}_{datetime.now().date()}_ROIs.png"
+                        self.png_path1 = os.path.join(self.path, self.png_file1)
+                        
+                        fig.savefig(f"{self.png_path}")
+                        fig1.savefig(f"{self.png_path1}")
+                        
+                        plt.close(fig)
+                        plt.close(fig1)
                 except Exception as e:
-                    self.text_info_area.insert("end", f"Erreur lors de la sauvegarde : {str(e)}\n")
+                    self.text_info_area.insert("end", f"Erreur lors de la sauvegarde de l'image': {str(e)}\n")
                         
         else:
             self.text_info_area.insert("end", "Aucune image trouvée dans ce fichier DICOM.\n")
@@ -716,12 +735,15 @@ class CT_quality:
             # Sauvegarde des DataFrames dans un fichier Excel avec plusieurs feuilles
             with pd.ExcelWriter(self.save_path, engine="openpyxl") as writer:
                 self.df_results1.head(9).to_excel(writer, sheet_name="Résultats", float_format="%.2f")
-                self.df_data.iloc[:, [1]].to_excel(writer, sheet_name="Données")                   
+                #self.df_data.iloc[:, [1]].to_excel(writer, sheet_name="Données")            
+                self.df_data.to_excel(writer, sheet_name="Données")            
             self.save_image_rois()
             self.text_info_area.insert("end", "Sauvegarde terminée.\n")
             
         except Exception as e:
             self.text_info_area.insert("end", f"Erreur lors de la sauvegarde : {str(e)}\n")
+        
+        self.text_info_area.yview("end")
         
     # Fonction pour réinitialiser l'interface, supprimer les infos, données et canvas pour sélectionner un nouveau dossier 
     def reinitialize(self):
